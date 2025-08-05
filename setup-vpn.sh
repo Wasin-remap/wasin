@@ -1,22 +1,30 @@
 #!/bin/bash
 
+# -----------------------
+# VPN + Web Installer
+# By Wasin (Updated)
+# -----------------------
+
 # ========== CONFIG ==========
 VPN_PSK="vpnYAMAHA123"
-VPN_USER="YAMAHA"
-VPN_PASS="212224"
-VPN_NET="192.168.100"
+VPN_USERS=(
+  "YAMAHA:212224"
+  "HONDA:12345678"
+  "MT15:99999999"
+)
+VPN_SUBNET="192.168.100"
 WEB_HTML="Hello from your VPN server!"
 # ============================
 
-echo "🛠 ติดตั้ง VPN + Web Server บน Ubuntu..."
+echo "🛠 ติดตั้ง VPN + Web Server..."
 
 # อัปเดตระบบ
 apt update -y && apt upgrade -y
 
-# ติดตั้งแพ็คเกจหลัก
-apt install -y strongswan xl2tpd ppp ufw nginx curl
+# ติดตั้งแพ็กเกจ
+apt install -y strongswan xl2tpd ppp ufw nginx curl dos2unix
 
-# ตั้งค่า ipsec.conf
+# สร้าง ipsec.conf
 cat > /etc/ipsec.conf <<EOF
 config setup
   uniqueids=never
@@ -33,7 +41,7 @@ conn l2tp-psk
   esp=aes256-sha1!
 EOF
 
-# ตั้งค่า PSK
+# สร้าง PSK
 echo "%any  %any  : PSK \"$VPN_PSK\"" > /etc/ipsec.secrets
 
 # ตั้งค่า xl2tpd.conf
@@ -42,17 +50,18 @@ cat > /etc/xl2tpd/xl2tpd.conf <<EOF
 port = 1701
 
 [lns default]
-ip range = $VPN_NET.10-$VPN_NET.20
-local ip = $VPN_NET.1
+ip range = $VPN_SUBNET.10-$VPN_SUBNET.20
+local ip = $VPN_SUBNET.1
 require chap = yes
 refuse pap = yes
 require authentication = yes
 name = l2tpd
+ppp debug = yes
 pppoptfile = /etc/ppp/options.xl2tpd
 length bit = yes
 EOF
 
-# ตั้งค่า options.xl2tpd
+# สร้าง options.xl2tpd
 cat > /etc/ppp/options.xl2tpd <<EOF
 require-mschap-v2
 ms-dns 8.8.8.8
@@ -60,6 +69,7 @@ asyncmap 0
 auth
 crtscts
 lock
+hide-password
 modem
 mtu 1410
 mru 1410
@@ -70,14 +80,21 @@ lcp-echo-interval 30
 lcp-echo-failure 4
 EOF
 
-# สร้าง chap-secrets (user/pass)
-echo "$VPN_USER * $VPN_PASS *" > /etc/ppp/chap-secrets
+# สร้างไฟล์ user/pass
+echo "" > /etc/ppp/chap-secrets
+for USER_PAIR in "${VPN_USERS[@]}"; do
+    IFS=":" read -r USER PASS <<< "$USER_PAIR"
+    echo "$USER    l2tpd    $PASS    *" >> /etc/ppp/chap-secrets
+done
 
 # เปิด IP Forwarding
 echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
 sysctl -p
 
-# ปรับ firewall
+# อนุญาต subnet VPN
+ufw allow from $VPN_SUBNET.0/24
+
+# เปิด firewall
 ufw allow OpenSSH
 ufw allow 500,4500,1701/udp
 ufw allow http
@@ -87,7 +104,7 @@ ufw --force enable
 echo "<h1>$WEB_HTML</h1>" > /var/www/html/index.html
 systemctl restart nginx
 
-# เริ่มบริการ VPN
+# รีสตาร์ท VPN service
 systemctl restart strongswan
 systemctl restart xl2tpd
 
@@ -95,12 +112,13 @@ systemctl restart xl2tpd
 IP=$(curl -s ifconfig.me)
 
 echo ""
-echo "✅ ติดตั้งเรียบร้อย!"
+echo "✅ ติดตั้งเรียบร้อยแล้ว!"
 echo "🌐 Public IP: $IP"
-echo "🔐 VPN Username: $VPN_USER"
-echo "🔐 VPN Password: $VPN_PASS"
 echo "🔐 VPN PSK: $VPN_PSK"
-echo "📡 VPN Network: $VPN_NET.0/24"
-echo "🌍 เปิดเบราว์เซอร์: http://$IP"
-echo ""
-echo "📌 เชื่อมต่อจาก Windows ด้วย L2TP/IPSec (Pre-shared Key)
+for USER_PAIR in "${VPN_USERS[@]}"; do
+    IFS=":" read -r USER PASS <<< "$USER_PAIR"
+    echo "👤 User: $USER | Password: $PASS"
+done
+echo "📡 Subnet: $VPN_SUBNET.0/24"
+echo "🌍 Web: http://$IP"
+echo "📌 VPN Type: L2TP/IPSec with pre-shared key"

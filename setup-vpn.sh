@@ -60,7 +60,6 @@ asyncmap 0
 auth
 crtscts
 lock
-hide-password
 modem
 mtu 1410
 mru 1410
@@ -104,5 +103,4 @@ echo "🔐 VPN PSK: $VPN_PSK"
 echo "📡 VPN Network: $VPN_NET.0/24"
 echo "🌍 เปิดเบราว์เซอร์: http://$IP"
 echo ""
-echo "📌 เชื่อมต่อจาก Windows ด้วย L2TP/IPSec (Pre-shared Key)"
-
+echo "📌 เชื่อมต่อจาก Windows ด้วย L2TP/IPSec (Pre-shared Key)
